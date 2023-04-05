@@ -1,0 +1,53 @@
+---
+title: "Group Analysis"
+author: "Alex, Christine, Matthew, Xander"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages("tidyverse", "here")
+
+library(tidyverse)
+library(here)
+```
+
+## Research Question
+
+## Data Set
+
+```{r import-data}
+here()
+df <- read_csv(here("path to file"), colnames = TRUE) 
+```
+
+```{r clean-data}
+
+```
+
+## Target Causal Parameter
+```{r clean-data}
+
+```
+
+## Analyses
+
+
+### G-Comp
+```{r g-comp}
+
+
+```
+
+### IPW
+```{r IPW}
+
+
+```
+
+### SuperLearner/TMLE
+```{r TMLE}
+
+
+```
