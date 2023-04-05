@@ -18,12 +18,24 @@ library(here)
 ## Data Set
 
 ```{r import-data}
+# data set guide: https://data.nber.org/lbid/docs/LinkCO89Guide.pdf
+# raw data files:
+## download, unzip, and place in data folder:
+## http://www.nber.org/lbid/1989/linkco1989us_den.csv.zip
+## http://www.nber.org/lbid/1990/linkco1990us_den.csv.zip
+## http://www.nber.org/lbid/1991/linkco1991us_den.csv.zip
+
 here()
-df <- read_csv(here("path to file"), colnames = TRUE) 
+df <- read_csv(here("data/linkco1989us_den.csv"), col_names = TRUE)
+vars <- names(df)
+
+head(df)
 ```
 
 ```{r clean-data}
-
+df_tobacco <- df %>%
+  select(tobacco, tobuse, cigar, cigar6)
+head(df_tobacco)
 ```
 
 ## Target Causal Parameter
