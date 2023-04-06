@@ -26,16 +26,54 @@ library(here)
 ## http://www.nber.org/lbid/1991/linkco1991us_den.csv.zip
 
 here()
-df <- read_csv(here("data/linkco1989us_den.csv"), col_names = TRUE)
+df <- read_csv(here("data/linkco2015usden.csv"), col_names = TRUE)
 vars <- names(df)
-
+vars
 head(df)
 ```
 
 ```{r clean-data}
+
+# subset the data to variables of interest
 df_tobacco <- df %>%
-  select(tobacco, tobuse, cigar, cigar6)
-head(df_tobacco)
+  select(
+    bwtr4, # outcome variable (birth weight)
+    mrace15, mhisp_r, # race/ethnicity info
+    cig0_r, cig1_r, cig2_r, cig3_r, # smoking status at trimester, intervention variables
+    mager9,
+    dmar,
+    meduc,
+    wic,
+    mhtr,
+    bmi, dwgt_r, # mother weight info
+    rf_pdiab, rf_gdiab, rf_phype, # cormorbidites of mother
+    ip_gon, ip_syph, ip_chlam, ip_hepb, ip_hepc, # infectious diseases present
+    combgest, oegest_comb
+    )
+
+## creating outcome and intervention variables
+df_prep <- df_tobacco %>%
+  filter(bwtr4 != 4) %>% # remove unknown birth weights
+  filter(cig1_r != 6, cig2_r != 6, cig3_r != 6) %>% # remove unknown smoking status at each trimester
+  filter(dwgt_r != 999) %>% # remove unknown/unstated delivery weight of mother
+  mutate(Y = ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% # add a Y outcome variable
+  mutate(A = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>% # create intervention variable A
+  select(-bwtr4, -cig0_r, -cig1_r, -cig2_r, -cig3_r) # remove old variables used to create Y, A
+
+
+# change variables of interest to indicator variables/factors for analysis
+# helper function to create numerical indicator variables from Y/N coded variables
+create_indicator <- function(df, variables){
+  for (i in 1:length(variables)){
+    df[[variables[i]]] <- ifelse(df[[variables[i]]] == "Y", 1, 0)
+  }
+  return(df)
+}
+
+convert <- c("wic", "rf_pdiab", "rf_gdiab", "rf_phype", "ip_gon", "ip_syph", "ip_chlam", "ip_hepb", "ip_hepc")
+df_prep <- create_indicator(df_prep, convert)
+
+head(df_prep)
 ```
 
 ## Target Causal Parameter
