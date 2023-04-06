@@ -74,6 +74,9 @@ convert <- c("wic", "rf_pdiab", "rf_gdiab", "rf_phype", "ip_gon", "ip_syph", "ip
 df_prep <- create_indicator(df_prep, convert)
 
 head(df_prep)
+
+# number of records in dataset
+n <- nrow(df_prep)
 ```
 
 ## Target Causal Parameter
