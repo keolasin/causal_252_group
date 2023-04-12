@@ -32,7 +32,7 @@ The target causal parameter is the difference in the counterfactual risk of LBW 
 
 ## Data Set
 
-First, we import the data set for 2015 and inspect it.
+First, we import the data set for 2015 and inspect it, including variables available.
 
 ```{r import-data, echo = FALSE, message = FALSE, warning = FALSE}
 # data set guide: https://data.nber.org/lbid/docs/LinkCO89Guide.pdf
@@ -45,13 +45,14 @@ First, we import the data set for 2015 and inspect it.
 here()
 df <- read_csv(here("data/linkco2015usden.csv"), col_names = TRUE)
 vars <- names(df)
+
 vars
-head(df)
 ```
 
 Next, we select variables of interest for our analysis by subsetting from the larger data set.
 
-```{r clean-data, echo = FALSE, message = FALSE, warning = FALSE}
+### Variables included in the dataset are as follows:
+```{r select-vars, echo = FALSE, message = FALSE, warning = FALSE}
 
 # subset the data to variables of interest
 df_tobacco <- df %>%
@@ -74,6 +75,108 @@ df_tobacco <- df %>%
     )
 
 ```
+
+Variable Name
+Type
+Descriptive summary of measure
+
+smoked
+Exposure (A, binary)
+This variable is considered the intervention or exposure of interest - it’s a measure of whether the mother was considered a smoker (at least 1 cigarette/day) during any of the three trimesters.
+
+lbw
+Outcome (Y, binary)
+This variable is the outcome, which is the weight of the infant at time of birth, classified as low birth weight (1) when the birthweight was below 2500 grams. Birth weight greater than 2500 grams is coded as 0.
+
+mrace15
+Endogenous covariate
+Categorical race variable
+
+mhisp_r
+Endogenous covariate
+Categorical variable indicating hispanic origin status
+
+mager9
+Endogenous covariate
+Bins of age ranges
+
+dmar
+Endogenous covariate
+Categorical variable of marital status
+
+meduc
+Endogenous covariate
+Categorical variable of mother’s achieved education level
+
+wic
+Endogenous covariate
+Indicator variable of mother receiving WIC benefits
+
+mhtr
+Endogenous covariate
+Continuous variable of mother’s height
+
+bmi
+Endogenous covariate
+Continuous variable of mother’s bmi
+
+dwgt_r
+Endogenous covariate
+Continuous variable of mother’s weight at time of birth
+
+rf_pdiab
+Endogenous covariate
+Indicator variable of mother having pre-pregnancy diabetes
+
+rf_gdiab
+Endogenous covariate
+Indicator variable of mother with gestational diabetes
+
+rf_phype
+Endogenous covariate
+Indicator variable of mother with pre-pregnancy hypertension
+
+ip_gon
+Endogenous covariate
+Indicator variable of gonorrhea infection at time of birth
+
+ip_syph
+Endogenous covariate
+Indicator variable of syphilis infection at time of birth
+
+ip_chlam
+Endogenous covariate
+Indicator variable of chlamydia infection at time of birth
+
+ip_hepb
+Endogenous covariate
+Indicator variable of Hepatitis B infection at time of birth
+
+ip_hepc
+Endogenous covariate
+Indicator variable of Hepatitis C infection at time of birth
+
+oegest_comb
+Endogenous covariate
+An edited obstetric estimate of weeks of gestation, discrete 17-47
+
+tbo_rec
+Endogenous covariate
+Continuous variable of birth order
+
+wtgain
+Endogenous covariate
+Continuous variable of mother’s weight gain during gestation
+
+precare5
+Endogenous covariate
+Categorical variable of when prenatal care began
+
+sex
+Endogenous covariate
+Categorical variable of sex of infant
+
+### Data Cleaning
 
 Then, we recode some of the variables of interest into outcome and exposure variables A and Y. We also prepare the covariates and endogenous variables for analysis by recoding them into indicator or dummy variables. We also remove missings or unknowns, which is a very conservative analysis approach - future analysis may utilize data imputation, but given the large number of records in this data set and the relatively small number of missing/unknown data, for the purpose of this assignment the more conservative approach is taken.
 
@@ -119,6 +222,12 @@ df_cleaned <- create_indicator(df_prep, convert)
 
 head(df_cleaned)
 
+smoke_marg <- df_cleaned %>%
+  count(smoked)
+
+lbw_marg <- df_cleaned %>%
+  count(lbw)
+
 # number of records in dataset
 n <- nrow(df_cleaned)
 
@@ -126,7 +235,15 @@ n <- nrow(df_cleaned)
 n_cols <- length(df_cleaned)
 ```
 
-The dataset consists of a number of variables describing births and pregnancies in the United States in the year 2015 with "r n" records after removing missing values, obtained from the National Center for Health Statistics.
+The dataset consists of a number of variables describing births and pregnancies in the United States in the year 2015 with `r n` records after removing missing values, obtained from the National Center for Health Statistics.
+
+### Marginal Distributions of Exposure and Outcome
+
+For the mothers smoking status during the pregnancy, we observe:
+`r smoke_marg`
+
+For the low birth weight status at time of birth (outcome), we observe:
+`r lbw_marg`
 
 ## Expected Challenges
 
