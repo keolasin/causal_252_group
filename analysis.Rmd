@@ -62,14 +62,14 @@ df_tobacco <- df %>%
     tbo_rec, # birth order
     illb_r, ilop_r, ilp_r, # time since last live birth, last other pregnancy, last pregnancy
     mrace15, mhisp_r, # race/ethnicity info
-    cig0_r, cig1_r, cig2_r, cig3_r, # smoking status at trimester, intervention variables
-    mager9,
-    dmar,
-    meduc,
-    wic,
-    mhtr,
+    cig0_r, cig1_r, cig2_r, cig3_r, # smoking status during each trimester, exposure variables
+    mager9, # mother's age group
+    dmar, # marital status
+    meduc, # highest education level obtained of mother
+    wic, # mother recipient of WIC
+    mhtr, # mother height
     bmi, dwgt_r, wtgain, # mother weight info
-    rf_pdiab, rf_gdiab, rf_phype, # cormorbidites of mother
+    rf_pdiab, rf_gdiab, rf_phype, # co-morbidites of mother
     ip_gon, ip_syph, ip_chlam, ip_hepb, ip_hepc, # infectious diseases present
     oegest_comb
     )
@@ -200,11 +200,14 @@ df_noMissing <- df_tobacco %>%
     bmi != 99,
     tbo_rec != 9,
   )
+
+firstBorns <- df_noMissing %>%
+  filter(illb_r == 888)
   
 # creating outcome and exposure variable
-df_prep <- df_noMissing %>%
-  mutate(lbw= ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% # add a Y outcome variable
-  mutate(smoked = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>% # create intervention variable A
+df_prep <- firstBorns %>%
+  mutate(lbw = ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% # add a Y outcome variable (lbw)
+  mutate(smoked = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>% # create intervention variable A (smoked)
   select(-bwtr4, -cig0_r, -cig1_r, -cig2_r, -cig3_r) # remove old variables used to create Y, A
 
 
@@ -218,21 +221,33 @@ create_indicator <- function(df, variables){
 }
 
 convert <- c("wic", "rf_pdiab", "rf_gdiab", "rf_phype", "ip_gon", "ip_syph", "ip_chlam", "ip_hepb", "ip_hepc")
-df_cleaned <- create_indicator(df_prep, convert)
+df_firstBorns <- create_indicator(df_prep, convert)
 
-head(df_cleaned)
+head(df_firstBorns)
 
-smoke_marg <- df_cleaned %>%
+smoke_marg <- df_firstBorns %>%
   count(smoked)
 
-lbw_marg <- df_cleaned %>%
+lbw_marg <- df_firstBorns %>%
   count(lbw)
 
 # number of records in dataset
-n <- nrow(df_cleaned)
+n <- nrow(df_firstBorns)
 
 # number of columns (variables) in dataset
-n_cols <- length(df_cleaned)
+n_cols <- length(df_firstBorns)
+```
+
+```{r collinearity}
+
+# install.packages("corrplot")
+library(corrplot)
+
+corr_matrix <- df_firstBorns %>%
+  select(-illb_r, -ilop_r, -ilp_r, -sex) %>%
+  cor()
+
+corrplot(corr_matrix, method = "color")
 ```
 
 The dataset consists of a number of variables describing births and pregnancies in the United States in the year 2015 with `r n` records after removing missing values, obtained from the National Center for Health Statistics.
