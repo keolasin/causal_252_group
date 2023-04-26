@@ -9,10 +9,11 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 
 #install.packages("tidyverse", "here", "ggExtra")
-
 library(tidyverse)
 library(here)
 library(ggplot2)
+library(flextable)
+
 ```
 
 ## Research Question
@@ -223,8 +224,6 @@ create_indicator <- function(df, variables){
 convert <- c("wic", "rf_pdiab", "rf_gdiab", "rf_phype", "ip_gon", "ip_syph", "ip_chlam", "ip_hepb", "ip_hepc")
 df_firstBorns <- create_indicator(df_prep, convert)
 
-head(df_firstBorns)
-
 smoke_marg <- df_firstBorns %>%
   count(smoked)
 
@@ -237,6 +236,21 @@ n <- nrow(df_firstBorns)
 # number of columns (variables) in dataset
 n_cols <- length(df_firstBorns)
 ```
+```{r demographic-characteristics}
+head(df_firstBorns)
+summary_stats <- summarizor(df_firstBorns, by = "smoked")
+summary_stats <- as_flextable(summary_stats, spread_first_col = TRUE, separate_with = "variable")
+summary_stats
+
+
+table_1 <- flextable(df_firstBorns[sample.int(10),])
+table_1 <- add_header_row(table_1, colwidths = c(13,13), values = c("Mother characteristics", "others"))
+table_1 <- theme_vanilla(table_1)
+table_1 <- set_caption(table_1, caption = "Characteristics of the population of first-time mothers for live singleton births in the US")
+table_1 <- color(table_1, part = "footer", color = "#666666")
+table_1 <- add_footer_lines(table_1, "Live birth records and characteristics in the US for the year 2015.")
+```
+
 
 ```{r collinearity}
 
@@ -247,7 +261,28 @@ corr_matrix <- df_firstBorns %>%
   select(-illb_r, -ilop_r, -ilp_r, -sex) %>%
   cor()
 
-corrplot(corr_matrix, method = "color")
+corrplot(corr_matrix, method = "number", order = "hclust", title = "Collinearity Matrix of Variables", bg ="white")
+
+# lbw ~ oegest_comb,    -0.60
+# dwgt_r ~ bmi,          0.84
+# mager9 ~ wic,         -0.43
+# mager9 ~ meduc,        
+
+# we should keep bmi over dwgt_r, dwgt_r has less of an association to outcome (lbw) than bmi.
+
+# arbitrary high correlation considered to be greater than 0.7 to 1 (or -0.7 to -1)
+correlation <- as.data.frame(corr_matrix)
+high_correlation <- correlation %>%
+  filter_all(any_vars((0.5 < . & . < 1) | (-1 < . & . < -0.5)))
+```
+
+We should keep bmi over dwgt_r, dwgt_r has less of an association to outcome (lbw) than bmi.
+
+```{r main-terms-model}
+
+model1 <- glm(lbw ~ ., family = "binomial", data = df_firstBorns)
+summary(model1)
+
 ```
 
 The dataset consists of a number of variables describing births and pregnancies in the United States in the year 2015 with `r n` records after removing missing values, obtained from the National Center for Health Statistics.
