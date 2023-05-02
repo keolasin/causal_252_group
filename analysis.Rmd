@@ -7,15 +7,14 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-
-# install.packages("corrplot")
+install.packages("SuperLearner")
 library(tidyverse)
 library(here)
 library(ggplot2)
 library(flextable)
-library(arsenal)
 library(corrplot)
-
+library(earth)
+library(SuperLearner)
 ```
 
 ## Research Question
@@ -419,7 +418,10 @@ write.csv(df_5percent, file=here("sample_5percent.csv"), row.names=FALSE)
 
 ### SuperLearner/TMLE
 ```{r SL-setup}
+# set seed and library
 set.seed(252)
+library(earth)
+library(SuperLearner)
 
 # remove mediators from dataset
 df <- df_5percent %>%
@@ -457,11 +459,43 @@ for( v in 1:V ) {
   # (nrow(validation))
   
   # fit estimators
-  estA <- glm(lbw ~ ., family = "gaussian", data = training)
-  estB <- glm(Y ~ mrace15, mhisp_r, )
-  estB <- glm(Y ~ mrace15, mhisp_r, )
-  estB <- glm(Y ~ mrace15, mhisp_r, )
+  estA <- glm(lbw ~ ., family = "binomial", data = training)
+  estB <- glm(lbw ~ mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estC <- glm(lbw ~ mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estD <- glm(lbw ~ mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  
+  # predictions
+  predA <- predict(estA, newdata = validation, type = 'response')
+  predB <- predict(estB, newdata = validation, type = 'response')
+  predC <- predict(estC, newdata = validation, type = 'response')
+  predD <- predict(estD, newdata = validation, type = 'response')
+  
+  # predictions df
+  pred[fold==v, ] <- cbind(predA, predB, predC, predD)
+  
+  # difference in predictions Y and validation Y
+  cv.risk[v, ] <- c(
+    mean((validation$lbw - predA)^2),
+    mean((validation$lbw - predB)^2),
+    mean((validation$lbw - predC)^2),
+    mean((validation$lbw - predD)^2)
+  )
 }
+
+```
+
+```{r SL-select-estimator}
+
+colMeans(cv.risk)
+# estimator 1 - the main terms with all W1 has lowest average cross-validated risk
+```
+
+```{r SL-fitting}
+
+discrete.sl <- glm(lbw ~ ., family = "binomial", data = df)
+summary(discrete.sl)
+
+source(here())
 
 ```
 
