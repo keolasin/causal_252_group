@@ -7,13 +7,14 @@ output: pdf_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-
+install.packages("SuperLearner")
 library(tidyverse)
 library(here)
 library(ggplot2)
 library(flextable)
-library(arsenal)
-
+library(corrplot)
+library(earth)
+library(SuperLearner)
 ```
 
 ## Research Question
@@ -246,8 +247,10 @@ firstBorns <- df_noMissing %>%
   
 # creating outcome and exposure variable
 df_prep <- firstBorns %>%
-  mutate(lbw = ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% # add a Y outcome variable (lbw)
-  mutate(smoked = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>% # create intervention variable A (smoked)
+  # add a Y outcome variable (lbw)
+  mutate(lbw = ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% 
+  # create intervention variable A (smoked)
+  mutate(smoked = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>%
   select(-bwtr4, -cig0_r, -cig1_r, -cig2_r, -cig3_r) # remove old variables used to create Y, A
 
 
@@ -314,39 +317,14 @@ summary_stats <- labelizor(
 
 summary_stats <- labelizor(x = summary_stats, part = "header", labels = stringr::str_to_title)
 
-save_as_docx(
-  "table1" = summary_stats, path = here("tables/table1.docx")
-)
-save_as_image(summary_stats, path = here("tables/table1.png"))
+#### Uncomment to save table1 in various file formats ####
+
+# save_as_docx("table1" = summary_stats, path = here("tables/table1.docx"))
+# save_as_image(summary_stats, path = here("tables/table1.png"))
 summary_stats
-#  List of labels
-#     "tbo_rec" = "Tobacco Use",
-#     "mrace15" = "Mother Race/Ethnicity",
-#     "mhisp_r" = "Mother Hispanic/Latino",
-#     "mager9" = "Mother Age Group",
-#     "dmar" = "Marital Status",
-#     "meduc" = "Maternal Highest Education Level Achieved",
-#     "wic" = "WIC Beneficient",
-#     "mhtr" = "Height of Mother (in.)",
-#     "bmi" = "Mother BMI",
-#     "dwgt_r" = "Mother Weight",
-#     "wtgain" = "Mother Weight Gain during Pregnancy",
-#     "rf_pdiab",
-#     "rf_gdiab",
-#     "rf_phype",
-#     "ip_gon",
-#     "ip_syph",
-#     "ip_chlam",
-#     "ip_hepb",
-#     "ip_hepc",
-#     "oegest_comb" = "Weeks of Gestation determined by Ob/Gyn",
-#     "lbw" = "Low Birth Weight"
 ```
 
 ```{r collinearity}
-
-# install.packages("corrplot")
-library(corrplot)
 
 corr_matrix <- df_firstBorns %>%
   select(-illb_r, -ilop_r, -ilp_r, -sex) %>%
@@ -371,7 +349,8 @@ We should keep bmi over dwgt_r, dwgt_r has less of an association to outcome (lb
 
 ```{r main-terms-model}
 
-model1 <- glm(lbw ~ ., family = "binomial", data = df_firstBorns)
+# Adjust for W1
+model1 <- glm(lbw ~ mrace15+mhisp_r+mager9+dmar+meduc+wic+mhtr+bmi+rf_pdiab+rf_phype+recare, family = "binomial", data = df_firstBorns)
 summary(model1)
 
 ```
@@ -402,11 +381,23 @@ Potentially measuring only singleton births (single live birth per delivery) or 
 
 ### Sampling from Target Population
 
-```{r sample}
+```{r sample-5percent}
 
+set.seed(252)
+n <- nrow(df_firstBorns)
 sample_size <- n*0.05 # sample 5% of the larger dataframe, n = number of records in df
 
-df_5percent <- sample(df_firstBorns, sample_size)
+# take sample
+df_5percent <- df_firstBorns[sample(n, size = sample_size, replace = FALSE),]
+
+# create infectious disease indicator variable
+df_5percent <- df_5percent %>% 
+  # indicator variable for infectious disease present
+  mutate(sti = ifelse(ip_gon == 1 | ip_syph == 1 | ip_chlam == 1 | ip_hepb == 1 | ip_hepc == 1, 1, 0)) %>%
+  select(-ip_gon, -ip_syph, -ip_chlam, -ip_hepb, -ip_hepc, -illb_r, -ilop_r, -ilp_r)
+
+
+write.csv(df_5percent, file=here("sample_5percent.csv"), row.names=FALSE)
 
 ```
 
@@ -432,6 +423,7 @@ mean(predictY.exposed - predictY.unexposed)
 
 
 ```
+
 
 ### IPW
 ```{r IPW}
@@ -466,11 +458,113 @@ iptw.st
 
 ```
 
-### SuperLearner/TMLE
-```{r TMLE}
 
+### SuperLearner/TMLE
+```{r SL-setup}
+# set seed and library
+set.seed(252)
+library(earth)
+library(SuperLearner)
+
+# remove mediators from dataset
+df <- df_5percent %>%
+  select(-wtgain, -rf_gdiab, -sti, -oegest_comb, -dwgt_r, -sex)
+
+# 63530 obs, so n/V = 63530/5 = 12706 obs per fold
+n <- nrow(df)
+V <- 5
+n.per.fold <- n/V
+
+fold <- NULL
+for (k in 1:V) {
+  fold <- c(fold, rep(k, n.per.fold))
+}
+
+# check to ensure we have 12706 per fold
+# table(fold)
+# head(fold)
+
+# sampling
+fold <- sample(fold)
+
+# prediction and cross-validated matrices
+pred <- matrix(NA, nrow = n, ncol = 4)
+cv.risk <- matrix(NA, nrow = V, ncol = 4)
 
 ```
+
+```{r SL-training}
+
+for( v in 1:V ) {
+  validation <- df[fold==v,]
+  training <- df[fold!=v,]
+  # QA check n/V = 12706
+  # (nrow(validation))
+  
+  # fit estimators
+  estA <- glm(lbw ~ ., family = "binomial", data = training)
+  estB <- glm(lbw ~ smoked+mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estC <- glm(lbw ~ smoked+mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estD <- glm(lbw ~ smoked+mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  
+  # predictions
+  predA <- predict(estA, newdata = validation, type = 'response')
+  predB <- predict(estB, newdata = validation, type = 'response')
+  predC <- predict(estC, newdata = validation, type = 'response')
+  predD <- predict(estD, newdata = validation, type = 'response')
+  
+  # predictions df
+  pred[fold==v, ] <- cbind(predA, predB, predC, predD)
+  
+  # difference in predictions Y and validation Y
+  cv.risk[v, ] <- c(
+    mean((validation$lbw - predA)^2),
+    mean((validation$lbw - predB)^2),
+    mean((validation$lbw - predC)^2),
+    mean((validation$lbw - predD)^2)
+  )
+}
+
+```
+
+```{r SL-select-estimator}
+
+colMeans(cv.risk)
+# estimator 1 - the main terms with all W1 has lowest average cross-validated risk
+```
+
+```{r SL-setup2}
+
+discrete.sl <- glm(lbw ~ ., family = "binomial", data = df)
+summary(discrete.sl)
+
+source(here('wrappers/Wrappers.R'))
+
+SL.library <- c("SL.glm.EstA", "SL.glm.EstB", "SL.glm.EstC", "SL.glm.EstD", "SL.ridge", "SL.rpart", "SL.earth")
+
+X <- subset(df, select = -lbw)
+```
+
+```{r SL-run}
+
+SuperLearner(Y=df$lbw, X = X, SL.library = SL.library, cvControl = list(V=5))
+
+# cross-validate SL
+CV.SL.out <- CV.SuperLearner(Y=df$lbw, X=X, SL.library = SL.library, cvControl = list(V = 5), innerCvControl = list(list(V=5)))
+summary(CV.SL.out)
+```
+
+```{r TMLE}
+
+SL.library <- c("SL.mean", "SL.glm", "SL.step.interaction")
+# set new X, X1 (X|A=1), X0 (X|A=0)
+X <- subset(df, select = c(smoked, mrace15, mhisp_r, mager9, dmar, meduc, wic, mhtr, bmi, rf_pdiab, rf_phype, recare))
+X1 <- X0 <- X
+X1$smoked <- 1
+X0$smoked <- 0
+```
+
+
 
 ## Works Cited
 

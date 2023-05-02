@@ -5,3 +5,5 @@
 /data/*.csv
 **.pdf
 .RDataTmp
+tables/table1.png
+tables/table1.docx
