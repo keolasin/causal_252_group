@@ -427,10 +427,26 @@ predictY.exposed<-predict(model1, newdata=exposed, type='response')
 
 #Step 4: Using the original model, predict outcome for each individual in the sample under no exposure
 predictY.unexposed<-predict(model1, newdata=unexposed, type='response')
+
+# Step 5. take the mean of difference in the predicted outcomes to average over the distribution of the covariates - NOTE- do we have to change this based on the binary outcome?
+mean(predictY.exposed - predictY.unexposed)
 ```
 
 ### IPW
 ```{r IPW}
+#2. Estimate the epxosure mechanism P(A|W)
+IPWdata<-df%>%select(-lbw)
+prob.AW.reg<-glm(smoked~., family="binomial", data=IPWdata)
+
+# 3. # predicted probability of smoking, given baseline characteristics
+prob.1W <- predict(prob.AW.reg, type= "response")
+
+# predicted probability of not smoking, given baseline characteristics
+prob.0W <- 1 - prob.1W
+
+#4. Distribution of predicted probabilities
+summary(prob.1W)
+summary(prob.0W)
 
 
 ```
