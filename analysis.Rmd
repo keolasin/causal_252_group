@@ -412,14 +412,57 @@ df_5percent <- sample(df_firstBorns, sample_size)
 
 ### G-Comp
 ```{r g-comp}
+model1 <- glm(lbw ~ ., family = "binomial", data = df_5percent)
+summary(model1)
 
+#Step 2: Copy the original dataset into two new DFs: exposed and unexposed
+exposed<-unexposed<-df_5percent
+#Set smoked=1 in exposed and smoked=0 in unexposed
+exposed$smoked<-1
+unexposed$smoked<-0
+
+#Step 3: Using the original model, predict outcome for each individual in the sample under the exposure
+predictY.exposed<-predict(model1, newdata=exposed, type='response')
+
+#Step 4: Using the original model, predict outcome for each individual in the sample under no exposure
+predictY.unexposed<-predict(model1, newdata=unexposed, type='response')
+
+# Step 5. take the mean of difference in the predicted outcomes to average over the distribution of the covariates - NOTE- do we have to change this based on the binary outcome?
+mean(predictY.exposed - predictY.unexposed)
 
 
 ```
 
 ### IPW
 ```{r IPW}
+#2. Estimate the epxosure mechanism P(A|W)
+IPWdata<-df_5percent%>%select(-lbw)
+prob.AW.reg<-glm(smoked~., family="binomial", data=IPWdata)
 
+# 3. # predicted probability of smoking, given baseline characteristics
+prob.1W <- predict(prob.AW.reg, type= "response")
+
+# predicted probability of not smoking, given baseline characteristics
+prob.0W <- 1 - prob.1W
+
+#4. Distribution of predicted probabilities
+summary(prob.1W)
+summary(prob.0W)
+
+# 5. Create the weights
+wt1 <- as.numeric(df_5percent$smoked==1)/prob.1W
+wt0 <- as.numeric(df_5percent$smoked==0)/prob.0W
+#check weights
+summary(wt1) # one adult is being upweighted by 5113
+summary(wt0)
+
+# 6. Point estimate:
+iptw <- mean(wt1*df_5percent$lbw) - mean( wt0*df_5percent$lbw)
+iptw
+
+# 7. Stabilized IPTW estimator - Modified Horvitz-Thompson estimator
+iptw.st <- sum(wt1*df_5percent$lbw)/sum(wt1) - sum(wt0*df_5percent$lbw)/sum(wt0)
+iptw.st
 
 ```
 

@@ -456,7 +456,7 @@ summary(wt1) # one adult is being upweighted by 5113
 summary(wt0)
 
 # 6. Point estimate:
-iptw <- mean( wt1*df$lbw) - mean( wt0*df$lbw)
+iptw <- mean(wt1*df$lbw) - mean( wt0*df$lbw)
 iptw
 
 # 7. Stabilized IPTW estimator - Modified Horvitz-Thompson estimator
