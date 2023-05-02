@@ -460,9 +460,9 @@ for( v in 1:V ) {
   
   # fit estimators
   estA <- glm(lbw ~ ., family = "binomial", data = training)
-  estB <- glm(lbw ~ mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
-  estC <- glm(lbw ~ mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
-  estD <- glm(lbw ~ mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estB <- glm(lbw ~ smoked+mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estC <- glm(lbw ~ smoked+mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
+  estD <- glm(lbw ~ smoked+mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, family = "binomial", data = training)
   
   # predictions
   predA <- predict(estA, newdata = validation, type = 'response')
@@ -490,14 +490,37 @@ colMeans(cv.risk)
 # estimator 1 - the main terms with all W1 has lowest average cross-validated risk
 ```
 
-```{r SL-fitting}
+```{r SL-setup2}
 
 discrete.sl <- glm(lbw ~ ., family = "binomial", data = df)
 summary(discrete.sl)
 
-source(here())
+source(here('wrappers/Wrappers.R'))
 
+SL.library <- c("SL.glm.EstA", "SL.glm.EstB", "SL.glm.EstC", "SL.glm.EstD", "SL.ridge", "SL.rpart", "SL.earth")
+
+X <- subset(df, select = -lbw)
 ```
+
+```{r SL-run}
+
+SuperLearner(Y=df$lbw, X = X, SL.library = SL.library, cvControl = list(V=5))
+
+# cross-validate SL
+CV.SL.out <- CV.SuperLearner(Y=df$lbw, X=X, SL.library = SL.library, cvControl = list(V = 5), innerCvControl = list(list(V=5)))
+summary(CV.SL.out)
+```
+
+```{r TMLE}
+
+SL.library <- c("SL.mean", "SL.glm", "SL.step.interaction")
+# set new X, X1 (X|A=1), X0 (X|A=0)
+X <- subset(df, select = c(smoked, mrace15, mhisp_r, mager9, dmar, meduc, wic, mhtr, bmi, rf_pdiab, rf_phype, recare))
+X1 <- X0 <- X
+X1$smoked <- 1
+X0$smoked <- 0
+```
+
 
 
 ## Works Cited

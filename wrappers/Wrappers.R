@@ -18,12 +18,12 @@ SL.glm.EstA<- function(Y, X, newX, family, ...) {
 # ##############
 SL.glm.EstB<- function(Y, X, newX, family, ...) {
   if(family$family=='binomial') {
-    fit.glm<- glm(Y~ mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
+    fit.glm<- glm(Y~ smoked+mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
     pred <- predict(fit.glm, newdata=newX, type='response')
     fit<- list(object=fit.glm)
   }
   if(family$family=='gaussian'){
-  	 fit.glm<- glm(Y~ mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
+  	 fit.glm<- glm(Y~ smoked+mrace15 + mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
     pred <- predict(fit.glm, newdata=newX, type='response')
     fit<- list(object=fit.glm)
    }
@@ -36,12 +36,12 @@ SL.glm.EstB<- function(Y, X, newX, family, ...) {
 # Estimator C
 SL.glm.EstC <- function(Y, X, newX, family, ...) {
   if(family$family=='binomial') {
-    fit.glm<- glm(Y~ mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
+    fit.glm<- glm(Y~ smoked+mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
     pred <- predict(fit.glm, newdata=newX, type='response')
     fit<- list(object=fit.glm)
   }
   if(family$family=='gaussian'){
-    fit.glm<- glm(Y~ mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
+    fit.glm<- glm(Y~ smoked+mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr*bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
     pred <- predict(fit.glm, newdata=newX, type='response')
     fit<- list(object=fit.glm)
 
@@ -55,12 +55,12 @@ SL.glm.EstC <- function(Y, X, newX, family, ...) {
 # Estimator D
 SL.glm.EstD<- function(Y, X, newX, family, ...) {
   if(family$family=='binomial') {
-    fit.glm<- glm(Y~ mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
+    fit.glm<- glm(Y~ smoked+mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
     pred <- predict(fit.glm, newdata=newX, type='response')
     fit<- list(object=fit.glm)
   }
   if(family$family=='gaussian'){
-    fit.glm<- glm(Y~ mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
+    fit.glm<- glm(Y~ smoked+mrace15*mhisp_r + mager9*meduc + dmar + wic + mhtr + bmi + rf_pdiab + rf_phype + recare, data=X, family=family)
     pred <- predict(fit.glm, newdata=newX, type='response')
     fit<- list(object=fit.glm)
   }
