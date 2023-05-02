@@ -416,7 +416,7 @@ df_5percent <- sample(df_firstBorns, sample_size)
 model1 <- glm(lbw ~ ., family = "binomial", data = df)
 summary(model1)
 
-#Step 2: Coppy the original dataset into two new DFs: exposed and unexposed
+#Step 2: Copy the original dataset into two new DFs: exposed and unexposed
 exposed<-unexposed<-df
 #Set smoked=1 in exposed and smoked=0 in unexposed
 exposed$smoked<-1
@@ -448,7 +448,20 @@ prob.0W <- 1 - prob.1W
 summary(prob.1W)
 summary(prob.0W)
 
+# 5. Create the weights
+wt1 <- as.numeric(df$smoked==1)/prob.1W
+wt0 <- as.numeric(df$smoked==0)/prob.0W
+#check weights
+summary(wt1) # one adult is being upweighted by 5113
+summary(wt0)
 
+# 6. Point estimate:
+iptw <- mean( wt1*df$lbw) - mean( wt0*df$lbw)
+iptw
+
+# 7. Stabilized IPTW estimator - Modified Horvitz-Thompson estimator
+iptw.st <- sum(wt1*df$lbw)/sum(wt1) - sum(wt0*df$lbw)/sum(wt0)
+iptw.st
 ```
 
 ### SuperLearner/TMLE
