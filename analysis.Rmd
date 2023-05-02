@@ -8,11 +8,12 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-#install.packages("tidyverse", "here", "ggExtra")
-
 library(tidyverse)
 library(here)
 library(ggplot2)
+library(flextable)
+library(arsenal)
+
 ```
 
 ## Research Question
@@ -57,22 +58,33 @@ Next, we select variables of interest for our analysis by subsetting from the la
 # subset the data to variables of interest
 df_tobacco <- df %>%
   select(
-    bwtr4, # outcome variable (birth weight)
-    sex, # sex of infant assigned at birth
-    tbo_rec, # birth order
-    illb_r, ilop_r, ilp_r, # time since last live birth, last other pregnancy, last pregnancy
+    # W1 variables
     mrace15, mhisp_r, # race/ethnicity info
-    cig0_r, cig1_r, cig2_r, cig3_r, # smoking status at trimester, intervention variables
-    mager9,
-    dmar,
-    meduc,
-    wic,
-    mhtr,
-    bmi, dwgt_r, wtgain, # mother weight info
-    rf_pdiab, rf_gdiab, rf_phype, # cormorbidites of mother
-    ip_gon, ip_syph, ip_chlam, ip_hepb, ip_hepc, # infectious diseases present
-    oegest_comb
-    )
+    mager9, # mother's age group
+    dmar, # marital status
+    meduc, # highest education level obtained of mother
+    wic, # mother recipient of WIC
+    mhtr, # mother height
+    bmi, # mother bmi
+    rf_pdiab, # pre-pregnancy diabetes (mother)
+    rf_phype, # pre-pregnancy hypertension
+    recare, # month prenatal care began
+    # W2 variables
+    wtgain, # mother weight gain during gestation
+    rf_gdiab, # gestational diabetes
+    ip_gon, ip_syph, ip_chlam, ip_hepb, ip_hepc, # infectious diseases present at birth
+    # W3 variables
+    oegest_comb, # weeks of gestation (17-47)
+    dwgt_r, # mothers weight at time of birth
+    sex, # sex of infant assigned at birth
+    # Exposure variables
+    cig0_r, cig1_r, cig2_r, cig3_r, # smoking status during each trimester
+    # Outcome variables
+    bwtr4, # outcome variable (infant birth weight)
+    # subsetting/filtering variables
+    tbo_rec, # birth order of infant
+    illb_r, ilop_r, ilp_r # time since last live birth, last other pregnancy, last pregnancy
+  )
 
 ```
 
@@ -185,7 +197,7 @@ Then, we recode some of the variables of interest into outcome and exposure vari
 df_noMissing <- df_tobacco %>%
   filter(
     bwtr4 != 4, # remove unknown birth weights
-    cig1_r != 6, cig2_r != 6, cig3_r != 6, # remove unknown smoking status at each trimester
+    cig0_r != 6, cig1_r != 6, cig2_r != 6, cig3_r != 6, # remove unknown smoking status at each trimester
     dwgt_r != 999, # remove unknown/unstated delivery weight of mother
     oegest_comb != 99,
     wic != "U",
@@ -199,12 +211,43 @@ df_noMissing <- df_tobacco %>%
     wtgain != 99,
     bmi != 99,
     tbo_rec != 9,
+    recare != 99
   )
+
+# #W1 variables
+#     mrace15, mhisp_r, # race/ethnicity info
+#     mager9, # mother's age group
+#     dmar, # marital status
+#     meduc, # highest education level obtained of mother
+#     wic, # mother recipient of WIC
+#     mhtr, # mother height
+#     bmi, # mother bmi
+#     rf_pdiab, # pre-pregnancy diabetes (mother)
+#     rf_phype, # pre-pregnancy hypertension
+#     recare, # month prenatal care began
+# # W2 variables
+#     wtgain, # mother weight gain during gestation
+#     rf_gdiab, # gestational diabetes
+#     ip_gon, ip_syph, ip_chlam, ip_hepb, ip_hepc, # infectious diseases present at birth
+# # W3 variables
+#     oegest_comb, # weeks of gestation (17-47)
+#     dwgt_r, # mothers weight at time of birth
+#     sex, # sex of infant assigned at birth
+# # Exposure variables
+#     cig0_r, cig1_r, cig2_r, cig3_r, # smoking status during each trimester
+# # Outcome variables
+#     bwtr4, # outcome variable (infant birth weight)
+# # subsetting/filtering variables
+#     tbo_rec, # birth order of infant
+#     illb_r, ilop_r, ilp_r # time since last live birth, last other pregnancy, last pregnancy
+
+firstBorns <- df_noMissing %>%
+  filter(illb_r == 888)
   
 # creating outcome and exposure variable
-df_prep <- df_noMissing %>%
-  mutate(lbw= ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% # add a Y outcome variable
-  mutate(smoked = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>% # create intervention variable A
+df_prep <- firstBorns %>%
+  mutate(lbw = ifelse(bwtr4 == 1 | bwtr4 == 2, 1, 0)) %>% # add a Y outcome variable (lbw)
+  mutate(smoked = ifelse(cig1_r >= 1 | cig2_r >= 1 | cig3_r >= 1, 1, 0)) %>% # create intervention variable A (smoked)
   select(-bwtr4, -cig0_r, -cig1_r, -cig2_r, -cig3_r) # remove old variables used to create Y, A
 
 
@@ -218,21 +261,119 @@ create_indicator <- function(df, variables){
 }
 
 convert <- c("wic", "rf_pdiab", "rf_gdiab", "rf_phype", "ip_gon", "ip_syph", "ip_chlam", "ip_hepb", "ip_hepc")
-df_cleaned <- create_indicator(df_prep, convert)
+df_firstBorns <- create_indicator(df_prep, convert)
 
-head(df_cleaned)
-
-smoke_marg <- df_cleaned %>%
+smoke_marg <- df_firstBorns %>%
   count(smoked)
 
-lbw_marg <- df_cleaned %>%
+lbw_marg <- df_firstBorns %>%
   count(lbw)
 
 # number of records in dataset
-n <- nrow(df_cleaned)
+n <- nrow(df_firstBorns)
 
 # number of columns (variables) in dataset
-n_cols <- length(df_cleaned)
+n_cols <- length(df_firstBorns)
+```
+
+### Summary statistics of variables for analysis in the dataset
+
+To better understand the data we're working with and get a sense for the distributions across variables (W1,W2, W3, A, Y), we can observe the information presented in Table 1 below.
+
+```{r table1}
+head(df_firstBorns)
+
+summary_prep <- df_firstBorns %>%
+  select(-illb_r, -ilop_r, -ilp_r)
+summary_prep[,1:6] <- sapply(summary_prep[,1:6], as.factor)
+summary_prep[,9:11] <- sapply(summary_prep[,9:11], as.factor)
+summary_prep[,13:18] <- sapply(summary_prep[,13:18], as.factor)
+summary_prep[,21:24] <- sapply(summary_prep[,21:24], as.factor)
+
+summary_stats <- summarizor(summary_prep, by = "smoked", overall_label = "Overall")
+summary_stats <- as_flextable(summary_stats, spread_first_col = TRUE, separate_with = "variable")
+summary_stats <- labelizor(
+  x = summary_stats,
+  part = "header",
+  labels = c(
+    "0" = "No Smoking (A=0)", 
+    "1" = "Smoked (A=1)"
+  )
+)
+
+summary_stats <- labelizor(
+  x = summary_stats,
+  part = "body",
+  j = c("sex"),
+  labels = c(
+    "sex" = "Sex of Child",
+    "M" = "Male",
+    "F" = "Female"
+  )
+)
+
+summary_stats <- labelizor(x = summary_stats, part = "header", labels = stringr::str_to_title)
+
+save_as_docx(
+  "table1" = summary_stats, path = here("tables/table1.docx")
+)
+save_as_image(summary_stats, path = here("tables/table1.png"))
+summary_stats
+#  List of labels
+#     "tbo_rec" = "Tobacco Use",
+#     "mrace15" = "Mother Race/Ethnicity",
+#     "mhisp_r" = "Mother Hispanic/Latino",
+#     "mager9" = "Mother Age Group",
+#     "dmar" = "Marital Status",
+#     "meduc" = "Maternal Highest Education Level Achieved",
+#     "wic" = "WIC Beneficient",
+#     "mhtr" = "Height of Mother (in.)",
+#     "bmi" = "Mother BMI",
+#     "dwgt_r" = "Mother Weight",
+#     "wtgain" = "Mother Weight Gain during Pregnancy",
+#     "rf_pdiab",
+#     "rf_gdiab",
+#     "rf_phype",
+#     "ip_gon",
+#     "ip_syph",
+#     "ip_chlam",
+#     "ip_hepb",
+#     "ip_hepc",
+#     "oegest_comb" = "Weeks of Gestation determined by Ob/Gyn",
+#     "lbw" = "Low Birth Weight"
+```
+
+```{r collinearity}
+
+# install.packages("corrplot")
+library(corrplot)
+
+corr_matrix <- df_firstBorns %>%
+  select(-illb_r, -ilop_r, -ilp_r, -sex) %>%
+  cor()
+
+corrplot(corr_matrix, method = "number", order = "hclust", title = "Collinearity Matrix of Variables", bg ="white")
+
+# lbw ~ oegest_comb,    -0.60
+# dwgt_r ~ bmi,          0.84
+# mager9 ~ wic,         -0.43
+# mager9 ~ meduc,        
+
+# we should keep bmi over dwgt_r, dwgt_r has less of an association to outcome (lbw) than bmi.
+
+# arbitrary high correlation considered to be greater than 0.7 to 1 (or -0.7 to -1)
+correlation <- as.data.frame(corr_matrix)
+high_correlation <- correlation %>%
+  filter_all(any_vars((0.5 < . & . < 1) | (-1 < . & . < -0.5)))
+```
+
+We should keep bmi over dwgt_r, dwgt_r has less of an association to outcome (lbw) than bmi.
+
+```{r main-terms-model}
+
+model1 <- glm(lbw ~ ., family = "binomial", data = df_firstBorns)
+summary(model1)
+
 ```
 
 The dataset consists of a number of variables describing births and pregnancies in the United States in the year 2015 with `r n` records after removing missing values, obtained from the National Center for Health Statistics.
@@ -259,8 +400,19 @@ Potentially measuring only singleton births (single live birth per delivery) or 
 
 ## Analysis
 
+### Sampling from Target Population
+
+```{r sample}
+
+sample_size <- n*0.05 # sample 5% of the larger dataframe, n = number of records in df
+
+df_5percent <- sample(df_firstBorns, sample_size)
+
+```
+
 ### G-Comp
 ```{r g-comp}
+
 
 
 ```
@@ -302,12 +454,12 @@ counter <- function(df){
 }
 
 # create tables of marginal distributions
-counter(df_cleaned)
+# counter(df_firstBorns)
+# 
+# summary(df_firstBorns)
 
-summary(df_cleaned)
-
-ggplot(data = df_cleaned) +
+ggplot(data = df_firstBorns) +
   geom_histogram(aes(x=smoked))
-ggplot(data = df_cleaned) +
+ggplot(data = df_firstBorns) +
   geom_histogram(aes(x=lbw))
 ```
