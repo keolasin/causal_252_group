@@ -401,6 +401,25 @@ write.csv(df_5percent, file=here("sample_5percent.csv"), row.names=FALSE)
 
 ```
 
+```{r sample-1270}
+
+n2 <- nrow(df_firstBorns)
+sample_size <- n2*0.001 # sample 5% of the larger dataframe, n = number of records in df
+
+# take sample
+df_1270 <- df_firstBorns[sample(n2, size = sample_size, replace = FALSE),]
+
+# create infectious disease indicator variable
+df_1270 <- df_1270 %>% 
+  # indicator variable for infectious disease present
+  mutate(sti = ifelse(ip_gon == 1 | ip_syph == 1 | ip_chlam == 1 | ip_hepb == 1 | ip_hepc == 1, 1, 0)) %>%
+  select(-ip_gon, -ip_syph, -ip_chlam, -ip_hepb, -ip_hepc, -illb_r, -ilop_r, -ilp_r)
+
+
+write.csv(df_1270, file=here("sample_1270.csv"), row.names=FALSE)
+
+```
+
 ### G-Comp
 ```{r g-comp}
 
@@ -416,7 +435,7 @@ write.csv(df_5percent, file=here("sample_5percent.csv"), row.names=FALSE)
 ```
 
 
-### SuperLearner/TMLE
+### SuperLearner
 ```{r SL-setup}
 # set seed and library
 set.seed(252)
@@ -511,15 +530,271 @@ CV.SL.out <- CV.SuperLearner(Y=df$lbw, X=X, SL.library = SL.library, cvControl =
 summary(CV.SL.out)
 ```
 
-```{r TMLE}
+### TMLE
 
+```{r TMLE}
+# set up our small df for bootstrapping 500 times
+df2 <- df_1270 %>%
+  select(-wtgain, -rf_gdiab, -sti, -oegest_comb, -dwgt_r, -sex, -tbo_rec)
+
+n <- nrow(df2)
+# function for obtaining point estimates
+run.tmle <- function(df, SL.library){
+  # set new X, X1 (X|A=1), X0 (X|A=0)
+  X <- subset(df, select = -lbw)
+  X0 <- X
+  X1 <- X
+  X1$smoked <- 1
+  X0$smoked <- 0
+  
+  # estimate E_0(Y|A,W) with SL
+  SL.outcome2 <- SuperLearner(Y=df$lbw, X = X, SL.library = SL.library, family="binomial")
+  
+  # get the expected outcome, given the observed exposure and covariates
+  expY.givenAW <- predict(SL.outcome, newdata=dt)$pred
+  # expected outcome, given A=1 and covariates
+  expY.given1W <- predict(SL.outcome, newdata=X1)$pred
+  # expected outcome, given A=0 and covariates
+  expY.given0W <- predict(SL.outcome, newdata=X0)$pred
+  
+  # simple sub estimator:
+  PsiHat.SS <- mean(expY.given1W - expY.given0W)
+  
+  # IPW:
+  # Super Learner for the exposure mechanism P_0(A=1|W)
+  SL.exposure<- SuperLearner(Y=df$smoked, X=subset(df, select= -c(smoked,lbw)), SL.library=SL.library, family="binomial")
+ 
+  # generate the predicted prob of being exposed, given covariates
+  probA1.givenW <- SL.exposure$SL.predict
+  # generate the predicted prob of not being exposed, given covariates
+  probA0.givenW <- 1- probA1.givenW
+  # clever covariate
+  H.AW <- as.numeric(df$smoked==1)/probA1.givenW - as.numeric(df$smoked==0)/probA0.givenW
+ 
+  # also want to evaluate the clever covariate at A=1 and A=0 for all participants
+  H.1W <- 1/probA1.givenW
+  H.0W <- -1/probA0.givenW
+ 
+  # IPW estimate
+  PsiHat.IPW <- mean(H.AW*df$lbw)
+  
+  # TMLE
+  
+  # Update the initial estimator of E_0(Y|A,W)
+  # run logistic regression of Y on H.AW using the logit of the estimates as offset
+  logitUpdate<- glm( df$lbw ~ -1 +offset(qlogis(expY.givenAW)) + H.AW, family='binomial')
+  epsilon <- logitUpdate$coef
+ 
+  # obtain the targeted estimates
+  expY.givenAW.star<- plogis( qlogis(expY.givenAW)+ epsilon*H.AW )
+  expY.given1W.star<- plogis( qlogis(expY.given1W)+ epsilon*H.1W )
+  expY.given0W.star<- plogis( qlogis(expY.given0W)+ epsilon*H.0W )
+ 
+  # TMLE point estimate
+  PsiHat.TMLE<- mean(expY.given1W.star - expY.given0W.star)
+
+  # Return a list with the point estimates, targeted estimates of E_0(Y|A,W),
+  # and the vector of clever covariates
+
+  # data.frame to hold point estimates
+  estimates <- data.frame(cbind(PsiHat.SS=PsiHat.SS, PsiHat.IPW, PsiHat.TMLE))
+  # data.frame to hold targeted outcome predictions
+  predictions <- data.frame(cbind(expY.givenAW.star, expY.given1W.star, expY.given0W.star))
+  # label the columns of predictions
+  colnames(predictions)<- c('givenAW', 'given1W', 'given0W')
+  # return a list
+  return( list(estimates=estimates, predictions=predictions, H.AW=H.AW) )
+  
+}
+
+# specify our SL library
 SL.library <- c("SL.mean", "SL.glm", "SL.step.interaction")
-# set new X, X1 (X|A=1), X0 (X|A=0)
-X <- subset(df, select = c(smoked, mrace15, mhisp_r, mager9, dmar, meduc, wic, mhtr, bmi, rf_pdiab, rf_phype, recare))
-X1 <- X0 <- X
-X1$smoked <- 1
-X0$smoked <- 0
+
+# run the function
+out <- run.tmle(df=df2, SL.library = SL.library)
+
 ```
+
+```{r TMLE-influence-bias-curve}
+
+# point est
+PsiHat.TMLE <- out$estimates$PsiHat.TMLE
+# plugin
+IC <- out$H.AW*(df2$lbw - out$predictions[,'givenAW']) + out$predictions[,'given1W'] - out$predictions[,'given0W'] - PsiHat.TMLE
+summary(IC)
+
+# estimate sigma^2
+varHat.IC <- var(IC)/n
+varHat.IC
+
+# standard error est
+SE <- sqrt(varHat.IC)
+SE
+
+# 95% Confidence intervals
+alpha <- 0.05
+c(PsiHat.TMLE+qnorm(alpha/2, lower.tail=T)*se, PsiHat.TMLE+qnorm(alpha/2, lower.tail=F)*se)
+
+# p-value
+2*pnorm( abs(PsiHat.TMLE /se), lower.tail=F)
+
+```
+
+```{r NP-Boot}
+# B = 500 bootstrapped samples
+B <- 500
+
+est.boot <- data.frame(matrix(NA, nrow=B, ncol=3))
+set.seed(252)
+
+for(b in 1:B) {
+  index.boot <- sample(1:n, replace = T)
+  df.boot <- df2[index.boot,]
+  
+  # calling our run.tmle
+  est.boot[b,] <- run.tmle(df=df.boot, SL.library = SL.library)$estimates
+  
+  # iteration:
+  print(b)
+}
+colnames(est.boot) <- c("SS", "IPW", "TMLE")
+save(est.boot, file = 'boot_1270.Rdata')
+summary(est.boot)
+
+var(est.boot[,'SS'])
+var(est.boot[,'IPW'])
+var(est.boot[,'TMLE'])
+
+create.CI <- function(pt, boot, alpha=0.05){
+  Zquant <- qnorm(alpha/2, lower.tail=F)
+  CI.normal <- c(pt - Zquant*sd(boot), pt + Zquant*sd(boot) )
+  CI.quant <- quantile(boot, prob=c(0.025,0.975) )
+  yay <- data.frame(t ( c(pt, CI.normal, CI.quant))*100)
+  colnames(yay)<- c('pt', paste0(c('CI.lo', 'CI.hi'), '.normal'),
+  paste0(c('CI.lo', 'CI.hi'), '.quant') )
+  round(yay, 1)
+}
+
+create.CI(pt = out$estimates$PsiHat.TMLE, boot = est.boot[,"TMLE"])
+
+```
+
+
+```{r }
+
+# call the SuperLearner
+SL.outcome2 <- SuperLearner(Y = df2$lbw, X = X, SL.library = SL.library, family = "binomial")
+SL.outcome2
+
+expY.givenAW <- predict(SL.outcome2, newdata = X)$pred
+expY.given1W <- predict(SL.outcome2, newdata = X1)$pred
+expY.given0W <- predict(SL.outcome2, newdata = X0)$pred
+```
+
+```{r estimate-distribution}
+# estimating P0( A=1 | W )
+X <- subset(df2, select = -c(smoked, lbw))
+SL.exposure2 <- SuperLearner(Y = df2$smoked, X = X, SL.library = SL.library, family = "binomial")
+
+# probability of smoking during pregnancy given baseline W1
+probA1.givenW <- SL.exposure2$SL.predict
+# also equivalent to,
+# check <- predict(SL.exposure, newdata=X)$pred
+# sum(probA1.givenW != check)
+
+# probability of not smoking during pregnancy given baseline W1
+probA0.givenW <- 1 - probA1.givenW
+
+# summary
+summary(data.frame(probA1.givenW, probA0.givenW))
+```
+
+Are these predictions reasonably bounded away from 0 and 1?
+
+```{r clever-covariate}
+
+H.AW <- as.numeric(df2$smoked ==1)/probA1.givenW - as.numeric(df2$smoked == 0)/probA0.givenW
+H.1W <- 1/probA1.givenW
+H.0W <- -1/probA0.givenW
+
+# IPW estimator of the G-comp formula:
+PsiHat.IPW <- mean( H.AW * df2$lbw )
+PsiHat.IPW
+
+# estimator E_0( Y | A, W )
+logitUpdate <- glm(df2$lbw ~ -1 + offset(qlogis(expY.givenAW)) + H.AW, family = "binomial")
+epsilon <- logitUpdate$coef
+epsilon
+
+# obtaining target estimates
+expY.givenAW.star <- plogis(qlogis(expY.givenAW) + epsilon*H.AW)
+expY.given1W.star <- plogis(qlogis(expY.given1W) + epsilon*H.1W)
+expY.given0W.star <- plogis(qlogis(expY.given0W) + epsilon*H.0W)
+
+# updating
+coef(glm(df2$lbw ~ -1 + offset(qlogis(expY.givenAW.star)) + H.AW, family = "binomial"))
+
+# estimate Psi(P_0)
+PsiHat.SS <- mean(expY.given1W - expY.given0W)
+PsiHat.TMLE <- mean(expY.given1W.star - expY.given0W.star)
+
+# comparing the estimates...
+c(PsiHat.SS, PsiHat.IPW, PsiHat.TMLE)
+
+```
+
+
+```{r ltmle}
+
+library(ltmle)
+lmtle.SL <- lmtle(data = df2, Anodes = "smoked", Ynodes="lbw", abar = list(1,0), SL.library = SL.library)
+summary(ltmle.SL)
+
+ltmle.parametric<- ltmle(data=df2, Anodes='smoked', Ynodes='lbw', abar=list(1,0), Qform=c(Y="Q.kplus1 ~ smoked + mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr + bmi + rf_pdiab + rf_phype + recare"), gform="smoked ~ mrace15 + mhisp_r + mager9 + dmar + meduc + wic + mhtr + bmi + rf_pdiab + rf_phype + recare")
+summary(ltmle.parametric)
+
+# unadjusted estimators
+df2.U <- data.frame(U=1, df2)
+ltmle.unadj <- ltmle(data = df2.U, Anodes='smoked', Ynodes='lbw', abar = list(1,0), Qform = c(Y="Q.kplus1 ~ smoked"), gform = "smoked~U")
+summary(ltmle.unadj)
+
+# double robustness
+ltmle.DR <- ltmle(data = df2.U, Anodes='smoked', Ynodes='lbw', abar=list(1,0), SL.library = SL.library, gform="smoked~U")
+summary(ltmle.DR)
+
+```
+
+```{r ltmle-type1-errors}
+
+library(ltmle)
+Psi.P0 <- 0
+n <- nrows(df2)
+R <- 500
+pt.est <- ci.cov <- reject <- rep(NA,R)
+
+for(r in 1:R) {
+  sampler <- sample(1:n, replace = T)
+  newData <- df2[sampler,]
+  out.temp <- lmtle(data = newData, Anodes = 'smoked', Ynodes = 'lbw', abar=list(1,0), SL.library = SL.library, estimate.time = F)
+  out.temp <- summary(out.temp)$effect.measures$ATE
+  pt.est[r] <- out.temp$estimate
+  ci.cov[r] <- out.temp$CI[1] <= Psi.P0 & Psi.P0 <= out.temp$CI[2]
+  reject[r] <- out.temp$pvalue < 0.05
+  print(r)
+}
+
+save(pt.est, ci.cov, reject, file = 'tmle_type1s.Rdata')
+pdf(file = "hists_TMLE.pdf")
+hist(pt.est)
+
+# type 1 error rate
+mean(reject)
+
+# CI coverage
+mean(ci.cov)
+
+```
+
 
 
 
