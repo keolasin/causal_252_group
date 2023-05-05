@@ -1,0 +1,42 @@
+---
+title: "252 - initial data processing" 
+author: "Alexander Adia"
+date: "2023-04-17"
+output:
+  pdf_document: default
+  html_document: default
+---
+#Setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+# Install the 'pacman' package
+#install.packages("pacman")
+#Now load it... the 'pacman' package
+library(pacman)
+#packages to use load them now using the pacman "manager"
+p_load(dplyr, haven, readr, knitr, psych, ggplot2,stats4, stargazer, magrittr, qwraps2, Jmisc , fastDummies, xtable, skimr, tidyverse, caret, party, fastDummies, SuperLearner)
+
+#Set Working Directory
+setwd("/Users/alexadia/Documents/GitHub/causal_252_group/data")
+
+```
+#Load Data as birth_data
+```{r}
+#1. Load Data
+birth_data<-read_dta("linkco2015usden.dta")
+```
+#Sample and write CSVs
+```{r}
+#Five Percent Sample
+birth_data_5pct<- birth_data %>% sample_frac(0.05)
+#10 Percent Sample
+birth_data_10pct<- birth_data %>% sample_frac(0.10)
+#25 Percent Sample
+birth_data_25pct<- birth_data %>% sample_frac(0.25)
+
+#Write CSVs out
+write.csv(birth_data_5pct, "5pctdata")
+write.csv(birth_data_10pct, "10pctdata")
+write.csv(birth_data_25pct, "25pctdata")
+```
